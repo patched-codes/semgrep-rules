@@ -1,0 +1,85 @@
+# yamllint disable
+# License: MIT (c) GitLab Inc.
+# yamllint enable
+---
+rules:
+- id: "csharp_xss_rule-ScriptXss"
+  mode: "taint"
+  pattern-sources:
+  - patterns:
+    - pattern: "$PARAM"
+    - pattern-inside: |
+        $RET $METHOD(...,$PARAM,...){...}
+  - pattern: "Request.Cookies[...]"
+  - pattern: "Request.Cookies.Get(...)"
+  - pattern: "Request.Form[...]"
+  - pattern: "Request.Form.Get(...)"
+  - pattern: "Request.Headers[...]"
+  - pattern: "Request.Headers.Get(...)"
+  - pattern: "Request.QueryString[...]"
+  - pattern: "Request.QueryString.Get(...)"
+  - pattern: "Request.Params[...]"
+  - pattern: "Request.RawUrl"
+  - pattern: "Request.Url"
+  - pattern: "Request.Path"
+  - pattern: "Request.Body"
+  - pattern: "$CTX.Request.Cookies[...]"
+  - pattern: "$CTX.Request.Cookies.Get(...)"
+  - pattern: "$CTX.Request.Form[...]"
+  - pattern: "$CTX.Request.Form.Get(...)"
+  - pattern: "$CTX.Request.Headers[...]"
+  - pattern: "$CTX.Request.Headers.Get(...)"
+  - pattern: "$CTX.Request.QueryString[...]"
+  - pattern: "$CTX.Request.QueryString.Get(...)"
+  - pattern: "$CTX.Request.Body"
+  - pattern: "$ELE.Text"
+  pattern-sanitizers:
+  - patterns:
+    - metavariable-regex:
+        metavariable: "$FUNC"
+        regex: "(SerializeObject|HtmlAttributeEncode|HtmlEncode|HtmlFormUrlEncode|UrlEncode|UrlPathEncode|XmlAttributeEncode|XmlEncode|Encode)"
+    - pattern: "$CLASS.$FUNC(...)"
+  pattern-propagators:
+  - pattern: "(StringBuilder $OUT).Append($IN)"
+    from: "$IN"
+    to: "$OUT"
+  pattern-sinks:
+  - pattern: "$SCRIPTMANAGER.RegisterStartupScript(...)"
+  - pattern: "$SCRIPTMANAGER.RegisterClientScriptBlock(...)"
+  - pattern: "System.Web.UI.RegisterStartupScript(...)"
+  - pattern: "System.Web.UI.RegisterClientScriptBlock(...)"
+  languages:
+  - "csharp"
+  message: |
+    Cross Site Scripting (XSS) is an attack which exploits a web application or system to treat
+    user input
+    as markup or script code. It is important to encode the data depending on the specific context
+    it
+    is used in.
+
+    User input that is used within the application scripts must be encoded, sanitized or validated
+    to ensure it cannot change the behavior of the Javascript code.
+
+    It is _NOT_ advised to encode user input prior to inserting into a data store. The data will
+    need to be
+    encoded depending on context of where it is output. It is much safer to force the displaying
+    system to
+    handle the encoding and not attempt to guess how it should be encoded.
+
+    Consider using built-in framework capabilities for automatically encoding user input.
+    Depending
+    on output context, consider using the following `System.Text.Encodings.Web` encoders:
+
+    - [HtmlEncoder](https://learn.microsoft.com/en-us/dotnet/api/system.text.encodings.web.htmlencoder)
+    - [JavaScriptEncoder](https://learn.microsoft.com/en-us/dotnet/api/system.text.encodings.web.javascriptencoder)
+    - [UrlEncoder](https://learn.microsoft.com/en-us/dotnet/api/system.text.encodings.web.urlencoder)
+
+    For more information on protecting ASP.NET Core applications from XSS see:
+    https://learn.microsoft.com/en-us/aspnet/core/security/cross-site-scripting#accessing-encoders-in-code
+  metadata:
+    shortDescription: "Improper neutralization of input during web page generation
+      ('Cross-site Scripting')"
+    category: "security"
+    cwe: "CWE-79"
+    security-severity: "MEDIUM"
+  severity: "WARNING"

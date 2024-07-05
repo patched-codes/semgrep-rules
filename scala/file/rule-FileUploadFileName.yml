@@ -1,0 +1,36 @@
+# yamllint disable
+# License: MIT (c) GitLab Inc.
+# yamllint enable
+---
+rules:
+- id: "scala_file_rule-FileUploadFileName"
+  languages:
+  - "scala"
+  message: |
+    The filename provided by the FileUpload API can be tampered with by the client to reference
+    unauthorized files. The provided filename should be properly validated to ensure it's properly
+    structured, contains no unauthorized path characters (e.g., / \), and refers to an authorized
+    file.
+  metadata:
+    category: "security"
+    cwe: "CWE-22"
+    shortDescription: "Improper limitation of a pathname to a restricted directory
+      ('Path Traversal')"
+    technology:
+    - "scala"
+    owasp:
+    - "A5:2017-Broken Access Control"
+    - "A01:2021-Broken Access Control"
+    security-severity: "Info"
+  patterns:
+  - pattern: |
+      def $FUNC (..., $REQ: HttpServletRequest, ... ) = {
+        ...
+        val $FILES = ($SFU: ServletFileUpload).parseRequest($REQ)
+        ...
+        for ($FILE <- $FILES.asScala) {
+          ...
+        }
+      }
+  - pattern: "$ITEM.getName()"
+  severity: "WARNING"

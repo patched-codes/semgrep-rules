@@ -1,0 +1,125 @@
+# yamllint disable
+# License: Apache 2.0 (c) gosec
+# source (original): https://github.com/securego/gosec/blob/master/rules/readfile.go
+# yamllint enable
+---
+rules:
+- id: "go_filesystem_rule-fileread"
+  languages:
+  - "go"
+  mode: "taint"
+  pattern-sources:
+  - pattern: "os.Getenv(...)"
+  - pattern: "fmt.Sprintf(...)"
+  - pattern: "filepath.Join(...)"
+  - pattern: "path.Join(...)"
+  - patterns:
+    - pattern-either:
+      - pattern: "... + $TAINTED"
+      - pattern: "... + $TAINTED + ..."
+      - pattern: "$TAINTED + ..."
+    - pattern-not: "\"...\" + $TAINTED"
+    - pattern-not: "\"...\" + $TAINTED + \"...\""
+    - pattern-not: "$TAINTED + \"...\""
+    - pattern-not: "fmt.Sprintf(\"...\", \"...\")"
+  - patterns:
+    - pattern-either:
+      - pattern: |
+          ($REQUEST : *http.Request).$SOURCE_METHOD
+      - pattern: |
+          ($REQUEST : http.Request).$SOURCE_METHOD
+    - metavariable-regex:
+        metavariable: "$SOURCE_METHOD"
+        regex: "^(BasicAuth|Body|Cookie|Cookies|Form|FormValue|GetBody|Host|MultipartReader|ParseForm|ParseMultipartForm|PostForm|PostFormValue|Referer|RequestURI|Trailer|TransferEncoding|UserAgent|URL)$"
+  pattern-sanitizers:
+  - patterns:
+    - pattern-either:
+      - pattern: |
+          $CLEAN := $PKG.Clean(...)
+          ...
+          if !strings.HasPrefix($CLEAN, "...") {...}
+      - pattern: |
+          $CLEAN := $PKG.Clean(...)
+          ...
+          if strings.HasPrefix($CLEAN, "...") {...}
+      - pattern: |
+          $CLEAN := $PKG.Clean(...)
+          ...
+          if strings.HasPrefix($CLEAN, "...") == false {...}
+    - metavariable-regex:
+        metavariable: "$PKG"
+        regex: "^((file)?path)$"
+  pattern-sinks:
+  - pattern: "os.OpenFile(...)"
+  - pattern: "os.Open(...)"
+  - pattern: "os.ReadFile(...)"
+  - pattern: "ioutil.ReadFile(...)"
+  message: |
+    The application dynamically constructs file or path information. If the path
+    information comes from user input, it could be abused to read sensitive files,
+    access other users data or aid in exploitation to gain further system access.
+
+    User input should never be used in constructing paths or files for interacting
+    with the filesystem. This includes filenames supplied by user uploads or downloads.
+    If possible, consider hashing user input or replacing it with unique values.
+    Additionally, use `filepath.Base` to only use the filename and not path information.
+    Always validate the full path prior to opening or writing to any file.
+
+    Example using `filepath.Base`, generating a unique filename without using
+    user input to construct filepath information:
+    ```
+    type userData struct {
+        id           string
+        userFilename string
+    }
+
+    func newUserData(userFilename string) userData {
+        return userData{
+            id:           randomFileID(), // random id as the filename
+            userFilename: userFilename,
+        }
+    }
+
+    // randomFileID generates a random id, to be used as a filename
+    func randomFileID() string {
+        id := make([]byte, 16)
+        if _, err := io.ReadFull(rand.Reader, id); err != nil {
+            log.Fatal(err)
+        }
+        return hex.EncodeToString(id)
+    }
+
+    func main() {
+
+        // user input, saved only as a reference
+        data := newUserData("../../possibly/malicious")
+
+        // restrict all file access to this path
+        const basePath = "/tmp/"
+
+        // resolve the full path, but only use our random generated id
+        resolvedPath, err := filepath.Join(basePath, filepath.Base(data.id))
+        if err != nil {
+            log.Fatal(err)
+        }
+
+        // verify the path is prefixed with our basePath
+        if !strings.HasPrefix(resolvedPath, basePath) {
+            log.Fatal("path does not start with basePath")
+        }
+        // process / work with file
+    }
+    ```
+
+    For more information on path traversal issues see OWASP:
+    https://owasp.org/www-community/attacks/Path_Traversal
+  metadata:
+    shortDescription: "Improper limitation of a pathname to a restricted directory
+      ('Path Traversal')"
+    cwe: "CWE-22"
+    owasp:
+    - "A5:2017-Broken Access Control"
+    - "A01:2021-Broken Access Control"
+    security-severity: "Medium"
+    category: "security"
+  severity: "WARNING"

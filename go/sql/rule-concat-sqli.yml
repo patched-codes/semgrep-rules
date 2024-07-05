@@ -1,0 +1,71 @@
+# yamllint disable
+# License: Apache 2.0 (c) gosec
+# source (original): https://github.com/securego/gosec/blob/master/rules/sql.go
+# hash: c6e10af
+# yamllint enable
+---
+rules:
+- id: "go_sql_rule-concat-sqli"
+  languages:
+  - "go"
+  mode: taint
+  pattern-sources:
+  - patterns:
+    - pattern: "fmt.Sprintf(...)"
+    - pattern-not: |
+        fmt.Sprintf("...", "...")
+  - patterns:
+    - pattern: |
+        "..." + $X
+    - pattern-not: |
+        "..." + "..."
+  - pattern: |
+      ($SB : strings.Builder).String()
+  pattern-sinks:
+  - patterns:
+    - pattern: "$DB.$METHOD(...)"
+    - metavariable-regex:
+        metavariable: $METHOD
+        regex: "^(Exec(Context)?|Query(Context)?|QueryRow(Context)?)$"
+  message: |
+    SQL Injection is a critical vulnerability that can lead to data or system compromise. By
+    dynamically generating SQL query strings, user input may be able to influence the logic of
+    the SQL statement. This could lead to an adversary accessing information they should
+    not have access to or in some circumstances, being able to execute OS functionality or code.
+
+    Replace all dynamically generated SQL queries with parameterized queries. In situations where
+    dynamic queries must be created, never use direct user input, but instead use a map or
+    dictionary of valid values and resolve them using a user supplied key.
+
+    For example, some database drivers do not allow parameterized queries for `>` or `<` comparison
+    operators. In these cases, do not use a user supplied `>` or `<` value, but rather have the
+    user
+    supply a `gt` or `lt` value. The alphabetical values are then used to look up the `>` and `<`
+    values to be used in the construction of the dynamic query. The same goes for other queries
+    where
+    column or table names are required but cannot be parameterized.
+
+    Example using parameterized queries with `sql.Query`:
+    ```
+    rows, err := db.Query("SELECT * FROM users WHERE userName = ?", userName)
+    if err != nil {
+        return nil, err
+    }
+    defer rows.Close()
+    for rows.Next() {
+      // ... process rows
+    }
+    ```
+
+    For more information on SQL Injection see OWASP:
+    https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html
+  metadata:
+    shortDescription: "Improper neutralization of special elements used in an SQL
+      command ('SQL Injection')"
+    cwe: "CWE-89"
+    owasp:
+    - "A1:2017-Injection"
+    - "A03:2021-Injection"
+    security-severity: "High"
+    category: "security"
+  severity: "WARNING"

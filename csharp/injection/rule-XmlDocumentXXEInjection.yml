@@ -1,0 +1,53 @@
+# yamllint disable
+# License: MIT (c) GitLab Inc.
+# yamllint enable
+---
+rules:
+- id: "csharp_injection_rule-XmlDocumentXXEInjection"
+  languages:
+  - "csharp"
+  mode: "taint"
+  pattern-sinks:
+  - patterns:
+    - pattern-not-inside: |
+        (XmlDocument $DOC).XmlResolver = null;
+        ...
+    - pattern-either:
+      - pattern: "(XmlDocument $DOC).Load(...);"
+      - pattern: "(XmlDocument $DOC).LoadXml(...);"
+  pattern-sources:
+  - pattern: "var $DOC = new System.Xml.XmlDocument(...);"
+  - patterns:
+    - pattern: "var $DOC = new System.Xml.XmlDocument {...};"
+    - pattern-not: "var $DOC = new System.Xml.XmlDocument {...,XmlResolver = null,...};"
+  message: |
+    External XML entities are a feature of XML parsers that allow documents to contain references
+    to
+    other documents or data. This feature can be abused to read files, communicate with external
+    hosts,
+    exfiltrate data, or cause a Denial of Service (DoS).
+
+    XML parsers and document loaders must be configured to not resolve entities. This can be done
+    by:
+    - Ensuring you are running a version of .NET Framework greater than 4.5.2 (released in 2014).
+    - Using `XDocument` which disables entity resolution and is generally safe from DoS.
+    - Setting `XmlDocument`'s `XmlResolver` to null.
+
+    Example of safely loading an XML file using `XmlDocument`:
+    ```
+    XmlDocument document = new XmlDocument();
+    document.XmlResolver = null;
+    document.Load("users.xml");
+    ```
+
+    For more information on XML security, see OWASP's guide:
+    https://cheatsheetseries.owasp.org/cheatsheets/XML_External_Entity_Prevention_Cheat_Sheet.html#net
+  severity: "WARNING"
+  metadata:
+    shortDescription: "Improper restriction of XML external entity reference ('XXE')"
+    category: "security"
+    cwe: "CWE-611"
+    owasp:
+    - "A1:2017-Injection"
+    - "A03:2021-Injection"
+    security-severity: "Medium"
