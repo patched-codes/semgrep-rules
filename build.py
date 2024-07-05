@@ -1,5 +1,7 @@
 import os
-import yaml
+import ruamel.yaml
+
+yaml = ruamel.yaml.YAML()
 
 def combine_yaml_files(root_dir, output_file):
     # Delete the output file if it already exists
@@ -16,7 +18,7 @@ def combine_yaml_files(root_dir, output_file):
                 file_path = os.path.join(root, file)
                 with open(file_path, 'r') as yaml_file:
                     try:
-                        content = yaml.safe_load(yaml_file)
+                        content = yaml.load(yaml_file)
                         if 'rules' in content:
                             for rule in content['rules']:
                                 rule_id = rule['id']
@@ -25,7 +27,7 @@ def combine_yaml_files(root_dir, output_file):
                                 else:
                                     rule_ids.add(rule_id)
                                     combined_rules.append(rule)
-                    except yaml.YAMLError as e:
+                    except Exception as e:
                         print(f"Error reading {file_path}: {e}")
 
     if duplicate_ids:
@@ -39,7 +41,7 @@ def combine_yaml_files(root_dir, output_file):
         out_file.write("# License: MIT\n")
         out_file.write("# Version: 0.0.1\n")
         out_file.write("---\n")
-        yaml.dump({'rules': combined_rules}, out_file, default_flow_style=False)
+        yaml.dump({'rules': combined_rules}, out_file)
 
     print(f"Combined rules saved to {output_file}")
 
