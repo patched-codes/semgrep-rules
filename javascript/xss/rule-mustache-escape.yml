@@ -1,0 +1,43 @@
+# yamllint disable
+# License: MIT (c) GitLab Inc.
+# yamllint enable
+---
+rules:
+- id: "javascript_xss_rule-mustache-escape"
+  languages:
+  - "javascript"
+  - "typescript"
+  patterns:
+  - pattern-inside: |
+      $OBJ = require('mustache')
+      ...
+  - pattern-either:
+    - pattern: |
+        $OBJ.escape = function($TEXT) {
+          ...
+          return $TEXT;
+        }
+    - patterns:
+      - metavariable-regex:
+          metavariable: "$X"
+          regex: "\"\\{\\{\\{(.+?)\\}\\}\\}\""
+      - pattern: "$OBJ.render($X, ... )"
+    - patterns:
+      - metavariable-regex:
+          metavariable: "$Y"
+          regex: "\"\\{\\{\\&(.+?)\\}\\}\""
+      - pattern: "$OBJ.render($Y, ... )"
+  severity: "WARNING"
+  message: |
+    Markup escaping disabled. This can be used with some template engines to escape
+    disabling of HTML entities, which can lead to XSS attacks.
+  metadata:
+    cwe: "CWE-79"
+    owasp:
+    - "A7:2017-Cross-Site Scripting (XSS)"
+    - "A03:2021-Injection"
+    category: "security"
+    shortDescription: "Improper neutralization of input during web page generation
+      (XSS)"
+    # yamllint enable
+    security-severity: "Medium"

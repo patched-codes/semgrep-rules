@@ -8036,3 +8036,1175 @@ rules:
     technology:
     - java
     security-severity: High
+- id: javascript_dos_rule-non-literal-regexp
+  languages:
+  - javascript
+  - typescript
+  pattern-either:
+  - patterns:
+    - pattern: |
+        new RegExp(...)
+    - pattern-not: |
+        new RegExp("...", ...)
+    - pattern-not: |
+        new RegExp(/.../, ...)
+  - patterns:
+    - pattern: |
+        RegExp(...)
+    - pattern-not: |
+        RegExp("...", ...)
+    - pattern-not: |
+        RegExp(/.../, ...)
+  - patterns:
+    - pattern: |
+        "...".$METHOD(...)
+    - pattern-not: |
+        "...".$METHOD("...")
+    - pattern-not: |
+        "...".$METHOD(/.../)
+    - metavariable-regex:
+        metavariable: $METHOD
+        regex: ^(match|search)$
+  message: |
+    The `RegExp` constructor was called with a non-literal value. If an adversary were able to
+    supply a malicious regex, they could cause a Regular Expression Denial of Service (ReDoS)
+    against the application. In Node applications, this could cause the entire application to no
+    longer be responsive to other users' requests.
+
+    To remediate this issue, never allow user-supplied regular expressions. Instead, the regular 
+    expression should be  hardcoded. If this is not possible, consider using an alternative regular
+    expression engine such as [node-re2](https://www.npmjs.com/package/re2). RE2 is a safe alternative 
+    that does not support backtracking, which is what leads to ReDoS.
+
+    Example using re2 which does not support backtracking (Note: it is still recommended to
+    never use user-supplied input):
+    ```
+    // Import the re2 module
+    const RE2 = require('re2');
+
+    function match(userSuppliedRegex, userInput) {
+        // Create a RE2 object with the user supplied regex, this is relatively safe
+        // due to RE2 not supporting backtracking which can be abused to cause long running
+        // queries
+        var re = new RE2(userSuppliedRegex);
+        // Execute the regular expression against some userInput
+        var result = re.exec(userInput);
+        // Work with the result
+    }
+    ```
+
+    For more information on Regular Expression DoS see:
+    - https://owasp.org/www-community/attacks/Regular_expression_Denial_of_Service_-_ReDoS
+  metadata:
+    cwe: CWE-185
+    shortDescription: Regular expression with non-literal value
+    category: security
+    owasp:
+    - A1:2017-Injection
+    - A03:2021-Injection
+    security-severity: Medium
+  severity: WARNING
+- id: javascript_require_rule-non-literal-require
+  languages:
+  - javascript
+  - typescript
+  patterns:
+  - pattern: require($OBJ)
+  - pattern-not: require('...')
+  severity: WARNING
+  message: |
+    The application was found to dynamically import a module by calling `require` using a
+    non-literal string. An adversary might be able to read the first line of
+    arbitrary files. If they had write access to the file system, they may also be able to
+    execute arbitrary code.
+
+    To remediate this issue, use a hardcoded string literal when calling `require`. Never call it
+    it with dynamically created variables or user-supplied data.
+  metadata:
+    cwe: CWE-95
+    owasp:
+    - A1:2017-Injection
+    - A03:2021-Injection
+    shortDescription: Improper neutralization of directives in dynamically evaluated
+      code ('Eval Injection')
+    category: security
+    # yamllint disable
+    source-rule-url: 
+      https://github.com/nodesecurity/eslint-plugin-security/blob/master/rules/detect-non-literal-require.js
+    # yamllint enable
+    security-severity: Low
+- id: javascript_xss_rule-mustache-escape
+  languages:
+  - javascript
+  - typescript
+  patterns:
+  - pattern-inside: |
+      $OBJ = require('mustache')
+      ...
+  - pattern-either:
+    - pattern: |
+        $OBJ.escape = function($TEXT) {
+          ...
+          return $TEXT;
+        }
+    - patterns:
+      - metavariable-regex:
+          metavariable: $X
+          regex: '"\{\{\{(.+?)\}\}\}"'
+      - pattern: $OBJ.render($X, ... )
+    - patterns:
+      - metavariable-regex:
+          metavariable: $Y
+          regex: '"\{\{\&(.+?)\}\}"'
+      - pattern: $OBJ.render($Y, ... )
+  severity: WARNING
+  message: |
+    Markup escaping disabled. This can be used with some template engines to escape
+    disabling of HTML entities, which can lead to XSS attacks.
+  metadata:
+    cwe: CWE-79
+    owasp:
+    - A7:2017-Cross-Site Scripting (XSS)
+    - A03:2021-Injection
+    category: security
+    shortDescription: Improper neutralization of input during web page generation
+      (XSS)
+    # yamllint enable
+    security-severity: Medium
+- id: javascript_buf_rule-detect-new-buffer
+  languages:
+  - javascript
+  - typescript
+  patterns:
+  - patterns:
+    - pattern-not-inside: |-
+        require("safe-buffer")
+        ...
+    - pattern-not-inside: |-
+        import { Buffer } from "safe-buffer"
+        ...
+    - pattern-inside: |-
+        function $FUNC(..., $X, ...) { ... }
+    - pattern: new Buffer($X,...)
+  - pattern-not: |
+      new Buffer("...",...)
+  - pattern-not: |
+      new Buffer([...] , ...)
+  message: |
+    The application was found calling  the `new Buffer` constructor which has been deprecated
+    since Node 8.
+    By passing in a non-literal value, an adversary could allocate large amounts of memory.
+
+    Other issues also exist with the `Buffer` constructor:
+    - Older versions would return uninitialized memory, which could contain sensitive information
+    - Unable to easily determine what a Buffer contained if passed a non-literal value
+
+    To remediate this issue, use `Buffer.alloc` or `Buffer.from` instead to allocate a new
+    `Buffer`.
+
+    Example using `Buffer.alloc` instead of `new Buffer(...)`:
+    ```
+    // Create a new buffer using Buffer.from
+    const buf = Buffer.from([1, 2, 3, 4]);
+    // Work with buf
+    ```
+
+    For more information on migrating to `Buffer.from()`/`Buffer.alloc()` see:
+    - https://nodejs.org/en/docs/guides/buffer-constructor-deprecation
+  metadata:
+    shortDescription: Allocation of resources without limits or throttling
+    cwe: CWE-770
+    category: security
+    owasp:
+    - A9:2017-Using Components with Known Vulnerabilities
+    - A06:2021-Vulnerable and Outdated Components
+    # yamllint disable
+    source-rule-url: 
+      https://github.com/eslint-community/eslint-plugin-security/blob/main/rules/detect-new-buffer.js
+    # yamllint enable
+    security-severity: Medium
+  severity: WARNING
+- id: javascript_buf_rule-buffer-noassert
+  languages:
+  - javascript
+  - typescript
+  pattern-either:
+  - pattern: $OBJ.readUInt8(..., true)
+  - pattern: $OBJ.readUInt16LE(..., true)
+  - pattern: $OBJ.readUInt16BE(..., true)
+  - pattern: $OBJ.readUInt32LE(..., true)
+  - pattern: $OBJ.readUInt32BE(..., true)
+  - pattern: $OBJ.readInt8(..., true)
+  - pattern: $OBJ.readInt16LE(..., true)
+  - pattern: $OBJ.readInt16BE(..., true)
+  - pattern: $OBJ.readInt32LE(..., true)
+  - pattern: $OBJ.readInt32BE(..., true)
+  - pattern: $OBJ.readFloatLE(..., true)
+  - pattern: $OBJ.readFloatBE(..., true)
+  - pattern: $OBJ.readDoubleLE(..., true)
+  - pattern: $OBJ.readDoubleBE(..., true)
+  - pattern: $OBJ.writeUInt8(..., true)
+  - pattern: $OBJ.writeUInt16LE(..., true)
+  - pattern: $OBJ.writeUInt16BE(..., true)
+  - pattern: $OBJ.writeUInt32LE(..., true)
+  - pattern: $OBJ.writeUInt32BE(..., true)
+  - pattern: $OBJ.writeInt8(..., true)
+  - pattern: $OBJ.writeInt16LE(..., true)
+  - pattern: $OBJ.writeInt16BE(..., true)
+  - pattern: $OBJ.writeInt32LE(..., true)
+  - pattern: $OBJ.writeInt32BE(..., true)
+  - pattern: $OBJ.writeFloatLE(..., true)
+  - pattern: $OBJ.writeFloatBE(..., true)
+  - pattern: $OBJ.writeDoubleLE(..., true)
+  - pattern: $OBJ.writeDoubleBE(..., true)
+  severity: WARNING
+  message: |
+    The application was found using `noAssert` when calling the Buffer API. The `noAssert`
+    argument has
+    been deprecated since Node 10. Calling the Buffer API with this argument allows the offset
+    specified to
+    be beyond the end of the buffer. This could result in writing or reading beyond the end of the
+    buffer and
+    cause a segmentation fault, leading to the application crashing.
+
+    To remediate this issue, remove the `true` argument when calling any of the Buffer read or
+    write methods.
+    The application should still handle `RangeError` exception cases where the offset is beyond
+    the end of the
+    buffer.
+
+    Example reading from a Buffer without the `noAssert` argument and gracefully handling errors:
+    ```
+    // Create a new buffer
+    const buf = Buffer.from([1, 2, 3, 4]);
+    try {
+        // Read a single byte from it, starting at offset 1
+        const b = buf.readInt8(1);
+        // Work with b
+    } catch (e) {
+        if (e instanceof RangeError) {
+            console.log('Invalid offset: %s', e.message);
+        }
+        // handle other errors
+    }
+    ```
+  metadata:
+    shortDescription: Improper restriction of operations within the bounds of a memory
+      buffer
+    cwe: CWE-119
+    category: security
+    owasp:
+    - A9:2017-Using Components with Known Vulnerabilities
+    - A06:2021-Vulnerable and Outdated Components
+    # yamllint disable
+    source-rule-url: 
+      https://github.com/nodesecurity/eslint-plugin-security/blob/master/rules/detect-buffer-noassert.js
+    # yamllint enable
+    security-severity: Medium
+- id: javascript_timing_rule-possible-timing-attacks
+  languages:
+  - javascript
+  patterns:
+  - pattern-not: if ($Z == null) { ... };
+  - pattern-not: if ($Z === null) { ... };
+  - pattern-not: if ($Z != null) { ... };
+  - pattern-not: if ($Z !== null) { ... };
+  - pattern-not: if ($Q != undefined) { ... };
+  - pattern-not: if ($Q !== undefined) { ... };
+  - pattern-not: if ($Q == undefined) { ... };
+  - pattern-not: if ($Q === undefined) { ... };
+  - pattern-not: return $Y == null;
+  - pattern-not: return $Y === null;
+  - pattern-not: return $Y != null;
+  - pattern-not: return $Y !== null;
+  - pattern-not: return $Y == undefined;
+  - pattern-not: return $Y === undefined;
+  - pattern-not: return $Y != undefined;
+  - pattern-not: return $Y !== undefined;
+  - pattern-either:
+    - pattern: |
+        if (password == $X) {
+            ...
+        }
+    - pattern: |
+        if ($X == password) {
+            ...
+        }
+    - pattern: |
+        if (password === $X) {
+            ...
+        }
+    - pattern: |
+        if ($X === password) {
+            ...
+        }
+    - pattern: |
+        if (pass == $X) {
+            ...
+        }
+    - pattern: |
+        if ($X == pass) {
+            ...
+        }
+    - pattern: |
+        if (pass === $X) {
+            ...
+        }
+    - pattern: |
+        if ($X === pass) {
+            ...
+        }
+    - pattern: |
+        if (secret == $X) {
+            ...
+        }
+    - pattern: |
+        if ($X == secret) {
+            ...
+        }
+    - pattern: |
+        if (secret === $X) {
+            ...
+        }
+    - pattern: |
+        if ($X === secret) {
+            ...
+        }
+    - pattern: |
+        if (api == $X) {
+            ...
+        }
+    - pattern: |
+        if ($X == api) {
+            ...
+        }
+    - pattern: |
+        if (api === $X) {
+            ...
+        }
+    - pattern: |
+        if ($X === api) {
+            ...
+        }
+    - pattern: |
+        if (apiKey == $X) {
+            ...
+        }
+    - pattern: |
+        if ($X == apiKey) {
+            ...
+        }
+    - pattern: |
+        if (apiKey === $X) {
+            ...
+        }
+    - pattern: |
+        if ($X === apiKey) {
+            ...
+        }
+    - pattern: |
+        if (apiSecret == $X) {
+            ...
+        }
+    - pattern: |
+        if ($X == apiSecret) {
+            ...
+        }
+    - pattern: |
+        if (apiSecret === $X) {
+            ...
+        }
+    - pattern: |
+        if ($X === apiSecret) {
+            ...
+        }
+    - pattern: |
+        if (token == $X) {
+            ...
+        }
+    - pattern: |
+        if ($X == token) {
+            ...
+        }
+    - pattern: |
+        if (token === $X) {
+            ...
+        }
+    - pattern: |
+        if ($X === token) {
+            ...
+        }
+    - pattern: |
+        if (hash == $X) {
+            ...
+        }
+    - pattern: |
+        if ($X == hash) {
+            ...
+        }
+    - pattern: |
+        if (hash === $X) {
+            ...
+        }
+    - pattern: |
+        if ($X === hash) {
+            ...
+        }
+    - pattern: |
+        if (auth_token == $X) {
+            ...
+        }
+    - pattern: |
+        if ($X == auth_token) {
+            ...
+        }
+    - pattern: |
+        if (auth_token === $X) {
+            ...
+        }
+    - pattern: |
+        if ($X === auth_token) {
+            ...
+        }
+    - pattern: |
+        if (password != $X) {
+            ...
+        }
+    - pattern: |
+        if ($X != password) {
+            ...
+        }
+    - pattern: |
+        if (password !== $X) {
+            ...
+        }
+    - pattern: |
+        if ($X !== password) {
+            ...
+        }
+    - pattern: |
+        if (pass != $X) {
+            ...
+        }
+    - pattern: |
+        if ($X != pass) {
+            ...
+        }
+    - pattern: |
+        if (pass !== $X) {
+            ...
+        }
+    - pattern: |
+        if ($X !== pass) {
+            ...
+        }
+    - pattern: |
+        if (secret != $X) {
+            ...
+        }
+    - pattern: |
+        if ($X != secret) {
+            ...
+        }
+    - pattern: |
+        if (secret !== $X) {
+            ...
+        }
+    - pattern: |
+        if ($X !== secret) {
+            ...
+        }
+    - pattern: |
+        if (api != $X) {
+            ...
+        }
+    - pattern: |
+        if ($X != api) {
+            ...
+        }
+    - pattern: |
+        if (api !== $X) {
+            ...
+        }
+    - pattern: |
+        if ($X !== api) {
+            ...
+        }
+    - pattern: |
+        if (apiKey != $X) {
+            ...
+        }
+    - pattern: |
+        if ($X != apiKey) {
+            ...
+        }
+    - pattern: |
+        if (apiKey !== $X) {
+            ...
+        }
+    - pattern: |
+        if ($X !== apiKey) {
+            ...
+        }
+    - pattern: |
+        if (apiSecret != $X) {
+            ...
+        }
+    - pattern: |
+        if ($X != apiSecret) {
+            ...
+        }
+    - pattern: |
+        if (apiSecret !== $X) {
+            ...
+        }
+    - pattern: |
+        if ($X !== apiSecret) {
+            ...
+        }
+    - pattern: |
+        if (token != $X) {
+            ...
+        }
+    - pattern: |
+        if ($X != token) {
+            ...
+        }
+    - pattern: |
+        if (token !== $X) {
+            ...
+        }
+    - pattern: |
+        if ($X !== token) {
+            ...
+        }
+    - pattern: |
+        if (hash != $X) {
+            ...
+        }
+    - pattern: |
+        if ($X != hash) {
+            ...
+        }
+    - pattern: |
+        if (hash !== $X) {
+            ...
+        }
+    - pattern: |
+        if ($X !== hash) {
+            ...
+        }
+    - pattern: |
+        if (auth_token != $X) {
+            ...
+        }
+    - pattern: |
+        if ($X != auth_token) {
+            ...
+        }
+    - pattern: |
+        if (auth_token !== $X) {
+            ...
+        }
+    - pattern: |
+        if ($X !== auth_token) {
+            ...
+        }
+    - pattern: |
+        return $X === auth_token;
+    - pattern: |
+        return auth_token === $X;
+    - pattern: |
+        return $X === token;
+    - pattern: |
+        return token === $X;
+    - pattern: |
+        return $X === hash;
+    - pattern: |
+        return hash === $X;
+    - pattern: |
+        return $X === password;
+    - pattern: |
+        return password === $X;
+    - pattern: |
+        return $X === pass;
+    - pattern: |
+        return pass === $X;
+    - pattern: |
+        return $X === apiKey;
+    - pattern: |
+        return apiKey === $X;
+    - pattern: |
+        return $X === apiSecret;
+    - pattern: |
+        return apiSecret === $X;
+    - pattern: |
+        return $X === api_key;
+    - pattern: |
+        return api_key === $X;
+    - pattern: |
+        return $X === api_secret;
+    - pattern: |
+        return api_secret === $X;
+    - pattern: |
+        return $X === secret;
+    - pattern: |
+        return secret === $X;
+    - pattern: |
+        return $X === api;
+    - pattern: |
+        return api === $X;
+    - pattern: |
+        return $X == auth_token;
+    - pattern: |
+        return auth_token == $X;
+    - pattern: |
+        return $X == token;
+    - pattern: |
+        return token == $X;
+    - pattern: |
+        return $X == hash;
+    - pattern: |
+        return hash == $X;
+    - pattern: |
+        return $X == password;
+    - pattern: |
+        return password == $X;
+    - pattern: |
+        return $X == pass;
+    - pattern: |
+        return pass == $X;
+    - pattern: |
+        return $X == apiKey;
+    - pattern: |
+        return apiKey == $X;
+    - pattern: |
+        return $X == apiSecret;
+    - pattern: |
+        return apiSecret == $X;
+    - pattern: |
+        return $X == api_key;
+    - pattern: |
+        return api_key == $X;
+    - pattern: |
+        return $X == api_secret;
+    - pattern: |
+        return api_secret == $X;
+    - pattern: |
+        return $X == secret;
+    - pattern: |
+        return secret == $X;
+    - pattern: |
+        return $X == api;
+    - pattern: |
+        return api == $X;
+    - pattern: |
+        return $X !== auth_token;
+    - pattern: |
+        return auth_token !== $X;
+    - pattern: |
+        return $X !== token;
+    - pattern: |
+        return token !== $X;
+    - pattern: |
+        return $X !== hash;
+    - pattern: |
+        return hash !== $X;
+    - pattern: |
+        return $X !== password;
+    - pattern: |
+        return password !== $X;
+    - pattern: |
+        return $X !== pass;
+    - pattern: |
+        return pass !== $X;
+    - pattern: |
+        return $X !== apiKey;
+    - pattern: |
+        return apiKey !== $X;
+    - pattern: |
+        return $X !== apiSecret;
+    - pattern: |
+        return apiSecret !== $X;
+    - pattern: |
+        return $X !== api_key;
+    - pattern: |
+        return api_key !== $X;
+    - pattern: |
+        return $X !== api_secret;
+    - pattern: |
+        return api_secret !== $X;
+    - pattern: |
+        return $X !== secret;
+    - pattern: |
+        return secret !== $X;
+    - pattern: |
+        return $X !== api;
+    - pattern: |
+        return api !== $X;
+    - pattern: |
+        return $X != auth_token;
+    - pattern: |
+        return auth_token != $X;
+    - pattern: |
+        return $X != token;
+    - pattern: |
+        return token != $X;
+    - pattern: |
+        return $X != hash;
+    - pattern: |
+        return hash != $X;
+    - pattern: |
+        return $X != password;
+    - pattern: |
+        return password != $X;
+    - pattern: |
+        return $X != pass;
+    - pattern: |
+        return pass != $X;
+    - pattern: |
+        return $X != apiKey;
+    - pattern: |
+        return apiKey != $X;
+    - pattern: |
+        return $X != apiSecret;
+    - pattern: |
+        return apiSecret != $X;
+    - pattern: |
+        return $X != api_key;
+    - pattern: |
+        return api_key != $X;
+    - pattern: |
+        return $X != api_secret;
+    - pattern: |
+        return api_secret != $X;
+    - pattern: |
+        return $X != secret;
+    - pattern: |
+        return secret != $X;
+    - pattern: |
+        return $X != api;
+    - pattern: |
+        return api != $X;
+  severity: WARNING
+  message: |
+    The application was found executing string comparisons using one of `===`, `!==`, `==` or `!=`
+    against security sensitive values. String comparisons like this are not constant time, meaning
+    the
+    first character found not to match in the two strings will immediately exit the conditional
+    statement.
+    This allows an adversary to calculate or observe small timing differences depending on the
+    strings
+    passed to this comparison. This potentially allows an adversary the ability to brute force a
+    string
+    that will match the expected value by monitoring different character values.
+
+    To remediate this issue, use the `crypto.timingSafeEqual` method when comparing strings.
+
+    Example using `crypto.timingSafeEqual` to safely compare strings:
+    ```
+    function constantTimeIsPasswordEqual(userInput) {
+        // Retrieve the password from a secure data store such as a KMS or Hashicorp's vault.
+        const password = getPasswordFromSecureDataStore();
+        // Use crypto timingSafeEqual to ensure the comparison is done in constant time.
+        return crypto.timingSafeEqual(Buffer.from(userInput, 'utf-8'), Buffer.from(password,
+    'utf-8'));
+    }
+    ```
+
+    For more information on constant time comparison see:
+    - https://nodejs.org/api/crypto.html#crypto_crypto_timingsafeequal_a_b
+  metadata:
+    cwe: CWE-208
+    shortDescription: Observable timing discrepancy
+    category: security
+    owasp:
+    - A3:2017-Sensitive Data Exposure
+    - A02:2021-Cryptographic Failures
+    security-severity: Medium
+- id: javascript_pathtraversal_rule-non-literal-fs-filename
+  languages:
+  - typescript
+  - javascript
+  patterns:
+  - pattern-either:
+    - pattern-inside: |
+        import $MOD from $IMP
+        ...
+    - pattern-inside: |
+        $MOD = require($IMP)
+        ...
+  - metavariable-comparison:
+      metavariable: $IMP
+      comparison: $IMP in ['fs', 'node:fs', 'fs/promises', 'node:fs/promises', 'fs-extra']
+  - pattern-not: $MOD.appendFile("...", ...)
+  - pattern-not: $MOD.appendFileSync("...", ...)
+  - pattern-not: $MOD.chmod("...", ...)
+  - pattern-not: $MOD.chmodSync("...", ...)
+  - pattern-not: $MOD.chown("...", ...)
+  - pattern-not: $MOD.chownSync("...", ...)
+  - pattern-not: $MOD.createReadStream("...", ...)
+  - pattern-not: $MOD.createWriteStream("...", ...)
+  - pattern-not: $MOD.exists("...", ...)
+  - pattern-not: $MOD.existsSync("...", ...)
+  - pattern-not: $MOD.lchmod("...", ...)
+  - pattern-not: $MOD.lchmodSync("...", ...)
+  - pattern-not: $MOD.lchown("...", ...)
+  - pattern-not: $MOD.lchownSync("...", ...)
+  - pattern-not: $MOD.link("...", "...", ...)
+  - pattern-not: $MOD.linkSync("...", "...", ...)
+  - pattern-not: $MOD.lstat("...", ...)
+  - pattern-not: $MOD.lstatSync("...", ...)
+  - pattern-not: $MOD.mkdir("...", ...)
+  - pattern-not: $MOD.mkdirSync("...", ...)
+  - pattern-not: $MOD.open("...", ...)
+  - pattern-not: $MOD.openSync("...", ...)
+  - pattern-not: $MOD.readdir("...", ...)
+  - pattern-not: $MOD.readdirSync("...", ...)
+  - pattern-not: $MOD.readFile("...", ...)
+  - pattern-not: $MOD.readFileSync("...", ...)
+  - pattern-not: $MOD.readlink("...", ...)
+  - pattern-not: $MOD.readlinkSync("...", ...)
+  - pattern-not: $MOD.realpath("...", ...)
+  - pattern-not: $MOD.realpathSync("...", ...)
+  - pattern-not: $MOD.rename("...", "...", ...)
+  - pattern-not: $MOD.renameSync("...", "...", ...)
+  - pattern-not: $MOD.rmdir("...", ...)
+  - pattern-not: $MOD.rmdirSync("...", ...)
+  - pattern-not: $MOD.stat("...", ...)
+  - pattern-not: $MOD.statSync("...", ...)
+  - pattern-not: $MOD.symlink("...", "...", ...)
+  - pattern-not: $MOD.symlinkSync("...", "...", ...)
+  - pattern-not: $MOD.truncate("...", ...)
+  - pattern-not: $MOD.truncateSync("...", ...)
+  - pattern-not: $MOD.unlink("...", ...)
+  - pattern-not: $MOD.unlinkSync("...", ...)
+  - pattern-not: $MOD.unwatchFile("...", ...)
+  - pattern-not: $MOD.utimes("...", ...)
+  - pattern-not: $MOD.utimesSync("...", ...)
+  - pattern-not: $MOD.watch("...", ...)
+  - pattern-not: $MOD.watchFile("...", ...)
+  - pattern-not: $MOD.writeFile("...", ...)
+  - pattern-not: $MOD.writeFileSync("...", ...)
+  - pattern-either:
+    - pattern: $MOD.appendFile(...)
+    - pattern: $MOD.appendFileSync(...)
+    - pattern: $MOD.chmod(...)
+    - pattern: $MOD.chmodSync(...)
+    - pattern: $MOD.chown(...)
+    - pattern: $MOD.chownSync(...)
+    - pattern: $MOD.createReadStream(...)
+    - pattern: $MOD.createWriteStream(...)
+    - pattern: $MOD.exists(...)
+    - pattern: $MOD.existsSync(...)
+    - pattern: $MOD.lchmod(...)
+    - pattern: $MOD.lchmodSync(...)
+    - pattern: $MOD.lchown(...)
+    - pattern: $MOD.lchownSync(...)
+    - pattern: $MOD.link(...)
+    - pattern: $MOD.linkSync(...)
+    - pattern: $MOD.lstat(...)
+    - pattern: $MOD.lstatSync(...)
+    - pattern: $MOD.mkdir(...)
+    - pattern: $MOD.mkdirSync(...)
+    - pattern: $MOD.open(...)
+    - pattern: $MOD.openSync(...)
+    - pattern: $MOD.readdir(...)
+    - pattern: $MOD.readdirSync(...)
+    - pattern: $MOD.readFile(...)
+    - pattern: $MOD.readFileSync(...)
+    - pattern: $MOD.readlink(...)
+    - pattern: $MOD.readlinkSync(...)
+    - pattern: $MOD.realpath(...)
+    - pattern: $MOD.realpathSync(...)
+    - pattern: $MOD.rename(...)
+    - pattern: $MOD.renameSync(...)
+    - pattern: $MOD.rmdir(...)
+    - pattern: $MOD.rmdirSync(...)
+    - pattern: $MOD.stat(...)
+    - pattern: $MOD.statSync(...)
+    - pattern: $MOD.symlink(...)
+    - pattern: $MOD.symlinkSync(...)
+    - pattern: $MOD.truncate(...)
+    - pattern: $MOD.truncateSync(...)
+    - pattern: $MOD.unlink(...)
+    - pattern: $MOD.unlinkSync(...)
+    - pattern: $MOD.unwatchFile(...)
+    - pattern: $MOD.utimes(...)
+    - pattern: $MOD.utimesSync(...)
+    - pattern: $MOD.watch(...)
+    - pattern: $MOD.watchFile(...)
+    - pattern: $MOD.writeFile(...)
+    - pattern: $MOD.writeFileSync(...)
+  message: |
+    The application dynamically constructs file or path information. If the path
+    information comes from user-supplied input, it could be abused to read sensitive files,
+    access other users' data, or aid in exploitation to gain further system access.
+
+    User input should never be used in constructing paths or files for interacting
+    with the filesystem. This includes filenames supplied by user uploads or downloads.
+    If possible, consider hashing user input or using unique values and
+    use `path.normalize` to resolve and validate the path information
+    prior to processing any file functionality.
+
+    Example using `path.normalize` and not allowing direct user input:
+    ```
+    // User input, saved only as a reference
+    // id is a randomly generated UUID to be used as the filename
+    const userData = {userFilename: userSuppliedFilename, id: crypto.randomUUID()};
+    // Restrict all file processing to this directory only
+    const basePath = '/app/restricted/';
+
+    // Create the full path, but only use our random generated id as the filename
+    const joinedPath = path.join(basePath, userData.id);
+    // Normalize path, removing any '..'
+    const fullPath = path.normalize(joinedPath);
+    // Verify the fullPath is contained within our basePath
+    if (!fullPath.startsWith(basePath)) {
+        console.log("Invalid path specified!");
+    }
+    // Process / work with file
+    // ...
+    ```
+
+    For more information on path traversal issues see OWASP:
+    https://owasp.org/www-community/attacks/Path_Traversal
+  metadata:
+    shortDescription: Improper limitation of a pathname to a restricted directory
+      ('Path Traversal')
+    cwe: CWE-22
+    owasp:
+    - A5:2017-Broken Access Control
+    - A01:2021-Broken Access Control
+    security-severity: Medium
+    category: security
+  severity: WARNING
+- id: javascript_eval_rule-eval-with-expression
+  languages:
+  - javascript
+  - typescript
+  patterns:
+  - pattern-either:
+    - patterns:
+      - pattern: |
+          eval($OBJ)
+      - pattern-not: |
+          eval("...")
+    - patterns:
+      - pattern: |
+          $A.eval($OBJ)
+      - pattern-not: |
+          $A.eval("...")
+    - patterns:
+      - pattern: |
+          (..., eval)($OBJ)
+      - pattern-not: |
+          (..., eval)("...")
+    - patterns:
+      - pattern: |
+          $ALIAS = eval;
+          ...
+          $ALIAS($OBJ)
+      - pattern-not: |
+          $ALIAS = eval;
+          ...
+          $ALIAS("...")
+    - pattern: |
+        new Function(..., "..." + $OBJ + "...")
+    - pattern: |
+        $BODY = "..." + $OBJ + "..."
+        ...
+        new Function(..., $BODY)
+    - pattern: |
+        new Function(..., `...${...}...`)
+    - pattern: |
+        $BODY = `...${...}...`
+        ...
+        new Function(..., $BODY)
+    - pattern: |
+        Function(..., "..." + $OBJ + "...")
+    - pattern: |
+        $BODY = "..." + $OBJ + "..."
+        ...
+        Function(..., $BODY)
+    - pattern: |
+        $BODY = `...${...}...`
+        ...
+        Function(..., $BODY)
+    - pattern: |
+        Function(..., `...${...}...`)
+    - pattern: |
+        setTimeout("..." + $OBJ + "...", ...)
+    - pattern: |
+        setTimeout(`...${...}...`, ...)
+    - pattern: |
+        setInterval("..." + $OBJ + "...", ...)
+    - pattern: |
+        setInterval(`...${...}...`, ...)
+  - pattern-not: |
+      setTimeout("...", ...)
+  - pattern-not: |
+      setInterval("...", ...)
+  severity: WARNING
+  message: |
+    The application was found calling the `eval` function OR Function()
+      constructor OR setTimeout() OR setInterval() methods. If the
+
+      variables or strings or functions passed to these methods contains user-supplied input, an adversary could attempt to execute arbitrary
+
+      JavaScript
+
+      code. This could lead to a full system compromise in Node applications or Cross-site Scripting
+
+      (XSS) in web applications.
+
+
+      To remediate this issue, remove all calls to above methods and consider alternative methods for
+
+      executing
+
+      the necessary business logic. There is almost no safe method of calling `eval` or other above stated sinks with
+
+      user-supplied input.
+
+      Instead, consider alternative methods such as using property accessors to dynamically access
+
+      values.
+
+
+      Example using property accessors to dynamically access an object's property:
+
+      ```
+
+      // Define an object
+
+      const obj = {key1: 'value1', key2: 'value2'};
+
+      // Get key dynamically from user input
+
+      const key = getUserInput();
+
+      // Check if the key exists in our object and return it, or a default empty string
+
+      const value = (obj.hasOwnProperty(key)) ? obj[key] : '';
+
+      // Work with the value
+
+      ```
+
+
+      For more information on why not to use `eval`, and alternatives see:
+
+      - https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/eval#never_use_eval!
+
+      Other References:
+
+      - https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Function/Function
+
+      - https://developer.mozilla.org/en-US/docs/Web/API/setTimeout
+
+      - https://developer.mozilla.org/en-US/docs/Web/API/setInterval
+  metadata:
+    cwe: CWE-95
+    shortDescription: Improper neutralization of directives in dynamically evaluated
+      code ('Eval Injection')
+    category: security
+    owasp:
+    - A1:2017-Injection
+    - A03:2021-Injection
+    # yamllint disable
+    source-rule-url: 
+      https://github.com/nodesecurity/eslint-plugin-security/blob/master/rules/detect-eval-with-expression.js
+    # yamllint enable
+    security-severity: High
+- id: javascript_random_rule-pseudo-random-bytes
+  languages:
+  - javascript
+  - typescript
+  pattern: crypto.pseudoRandomBytes
+  severity: WARNING
+  message: |
+    Depending on the context, generating weak random numbers may expose cryptographic functions,
+    which rely on these numbers, to be exploitable. When generating numbers for sensitive values
+    such as tokens, nonces, and cryptographic keys, it is recommended that the `randomBytes` method
+    of the `crypto` module be used instead of `pseudoRandomBytes`.
+
+    Example using `randomBytes`:
+    ```
+    // Generate 256 bytes of random data
+    const randomBytes = crypto.randomBytes(256);
+    ```
+
+    For more information on JavaScript Cryptography see:
+    https://nodejs.org/api/crypto.html#cryptorandombytessize-callback
+  metadata:
+    cwe: CWE-338
+    shortDescription: Use of cryptographically weak pseudo-random number generator
+      (PRNG)
+    category: security
+    owasp:
+    - A3:2017-Sensitive Data Exposure
+    - A02:2021-Cryptographic Failures
+    # yamllint disable
+    source-rule-url: 
+      https://github.com/nodesecurity/eslint-plugin-security/blob/master/rules/detect-pseudoRandomBytes.js
+    # yamllint enable
+    security-severity: Medium
+- id: javascript_react_rule-dangerouslysetinnerhtml
+  languages:
+  - typescript
+  - javascript
+  pattern-either:
+  - pattern: |
+      <$X dangerouslySetInnerHTML=... />
+  - pattern: |
+      {dangerouslySetInnerHTML: ...}
+  severity: WARNING
+  message: |
+    The application was found calling `dangerouslySetInnerHTML` which may lead to Cross Site
+    Scripting (XSS). By default, React components will encode the data properly before rendering.
+    Calling `dangerouslySetInnerHTML` disables this encoding and allows raw markup
+    and JavaScript to be executed.
+
+    XSS is an attack which exploits a web application or system to treat
+    user input as markup or script code. It is important to encode the data, depending on the
+    specific context it is used in. There are at least six context types:
+
+    - Inside HTML tags `<div>context 1</div>`
+    - Inside attributes: `<div class="context 2"></div>`
+    - Inside event attributes `<button onclick="context 3">button</button>`
+    - Inside script blocks: `<script>var x = "context 4"</script>`
+    - Unsafe element HTML assignment: `element.innerHTML = "context 5"`
+    - Inside URLs: `<iframe src="context 6"></iframe><a href="context 6">link</a>`
+
+    Script blocks alone have multiple ways they need to be encoded. Extra care must be taken if
+    user input
+    is ever output inside of script tags.
+
+    User input that is displayed within the application must be encoded, sanitized or validated
+    to ensure it cannot be treated as HTML or executed as Javascript code. Care must also be
+    taken
+    to not mix server-side templating with client-side templating, as the server-side templating
+    will
+    not encode things like {{ 7*7 }} which may execute client-side templating features.
+
+    It is _NOT_ advised to encode user input prior to inserting into a data store. The data will
+    need to be
+    encoded depending on context of where it is output. It is much safer to force the displaying
+    system to
+    handle the encoding and not attempt to guess how it should be encoded.
+
+    Remove the call to `dangerouslySetInnerHTML` or ensure that the data used in this call does
+    not come from user-supplied input.
+
+    For more information on dangerously setting inner HTML see:
+    - https://react.dev/reference/react-dom/components/common#dangerously-setting-the-inner-html
+  metadata:
+    cwe: CWE-79
+    owasp:
+    - A7:2017-Cross-Site Scripting (XSS)
+    - A03:2021-Injection
+    shortDescription: Improper neutralization of input during web page generation
+      ('Cross-site Scripting')
+    category: security
+    security-severity: Medium
