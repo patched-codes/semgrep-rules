@@ -1,0 +1,124 @@
+# yamllint disable
+# License: MIT (c) GitLab Inc.
+# yamllint enable
+---
+rules:
+- id: "java_xml_rule-XmlDecoder"
+  languages:
+  - "java"
+  message: |
+    Deserialization attacks exploit the process of reading serialized data and turning it back
+    into an object. By constructing malicious objects and serializing them, an adversary may
+    attempt to:
+
+    - Inject code that is executed upon object construction, which occurs during the
+    deserialization process.
+    - Exploit mass assignment by including fields that are not normally a part of the serialized
+    data but are read in during deserialization.
+
+    Consider safer alternatives such as serializing data in the JSON format. Ensure any format
+    chosen allows
+    the application to specify exactly which object types are allowed to be deserialized.
+    Additionally, when
+    deserializing, never deserialize to base object types like `Object` and only cast to the exact
+    object
+    type that is expected.
+
+    To protect against mass assignment, only allow deserialization of the specific fields that are
+    required. If this is not easily done, consider creating an intermediary type that
+    can be serialized with only the necessary fields exposed.
+
+    Do note that `XMLEncoder` and `XMLDecoder` are not recommended. If the application must
+    use this serialization method, use a custom ClassLoader to prevent loading of arbitrary
+    classes:
+    ```
+    XMLDecoder decoder = new XMLDecoder(inputStream, null, null, new ClassLoader() {
+        @Override
+        protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
+            if (!name.equals(NameOfBeanHere.class.getName()) &&
+    !name.equals(XMLDecoder.class.getName())) {
+                throw new RuntimeException("Unauthorized deserialization attempt: " + name);
+            }
+
+            return super.loadClass(name, resolve);
+        }
+    });
+    ```
+
+    For more information on XML security see OWASP's guide:
+    https://cheatsheetseries.owasp.org/cheatsheets/XML_External_Entity_Prevention_Cheat_Sheet.html#java
+
+    For more details on deserialization attacks in general, see OWASP's guide:
+    https://cheatsheetseries.owasp.org/cheatsheets/Deserialization_Cheat_Sheet.html
+
+    It should be noted that [tools exist](https://github.com/frohoff/ysoserial) to
+    automatically create
+    exploit code for these vulnerabilities.
+  metadata:
+    shortDescription: "Deserialization of untrusted data"
+    category: "security"
+    cwe: "CWE-502"
+    owasp:
+    - "A8:2017-Insecure Deserialization"
+    - "A08:2021-Software and Data Integrity Failures"
+    security-severity: "High"
+  patterns:
+  - pattern: |
+      (java.beans.XMLDecoder $D).readObject();
+  - pattern-not:
+      pattern-either:
+      - patterns:
+        - pattern-inside: |
+            java.beans.XMLDecoder $DEC = new java.beans.XMLDecoder(..., $CL);
+            ...
+        - pattern: $DEC.readObject();
+        - metavariable-pattern:
+            metavariable: $CL
+            patterns:
+            - pattern: |
+                new ClassLoader(){
+                  ...
+                  $RET loadClass(String name, boolean resolve){
+                    if($X){
+                      throw ...
+                    }
+                    ...
+                  }
+                  ...
+                }
+            - metavariable-pattern:
+                metavariable: $X
+                pattern-either:
+                - pattern: |
+                    !name.equals(...)
+                - pattern: |
+                    !$LIST.contains(name)
+      - patterns:
+        - pattern-inside: |
+            ClassLoader $CLASS_LOADER = $CL;
+            ...
+            java.beans.XMLDecoder $DEC = new java.beans.XMLDecoder(..., $CLASS_LOADER);
+            ...
+        - pattern: $DEC.readObject();
+        - metavariable-pattern:
+            metavariable: $CL
+            patterns:
+            - pattern: |
+                new ClassLoader(){
+                  ...
+                  $RET loadClass(String name, boolean resolve){
+                    if($X){
+                      throw ...
+                    }
+                    ...
+                  }
+                  ...
+                }
+            - metavariable-pattern:
+                metavariable: $X
+                pattern-either:
+                - pattern: |
+                    !name.equals(...)
+                - pattern: |
+                    !$LIST.contains(name)
+  severity: "WARNING"

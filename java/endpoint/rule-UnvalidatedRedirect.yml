@@ -1,0 +1,70 @@
+# yamllint disable
+# License: MIT (c) GitLab Inc.
+# yamllint enable
+---
+rules:
+- id: "java_endpoint_rule-UnvalidatedRedirect"
+  languages:
+  - "java"
+  message: |
+      Unvalidated redirects occur when an application redirects a user to a
+      destination URL specified by a user supplied parameter that is not validated.
+      Such vulnerabilities can be used to facilitate phishing attacks.
+
+      To avoid open redirect vulnerabilities in Java, one effective strategy is to
+      only allow redirection to URLs that are pre-defined in a safe list. This safe
+      list can be implemented using a collection like a Map, List, or Dictionary,
+      where you store all the valid URLs or URL patterns. When a redirect request is
+      made, you can check if the requested URL is in this safe list before proceeding 
+      with the redirection. For example:
+
+      ```
+        protected void doGet(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
+            private List<String> safeUrls = new ArrayList<>();
+            safeUrls.add("/home");
+            safeUrls.add("/user/profile");
+            safeUrls.add("/dashboard");
+            
+            String redirectUrl = request.getParameter("url");
+
+            if (safeUrls.contains(redirectUrl)) {
+                response.sendRedirect(redirectUrl);
+            } else {
+                response.sendRedirect("/errorPage");
+            }
+        }"
+      ```  
+  mode: "taint"
+  pattern-sources:
+  - patterns:
+    - pattern: |
+        $URL = ($X.servlet.http.HttpServletRequest $REQ).$M(...);
+    - metavariable-regex:
+        metavariable: "$M"
+        regex: "(getParameter|getCookies|getHeader|getHeaders|getHeaderNames|getPathInfo|getPathTranslated|getContextPath|getQueryString|getRemoteUser|getRequestedSessionId|getRequestURI|getRequestURL|getServletPath|getParts|getPart|getReader)"
+  pattern-sinks:
+  - pattern-either:
+    - pattern: |
+        ($X.servlet.http.HttpServletResponse $RES).sendRedirect($URL)
+    - pattern: |
+        ($X.servlet.http.HttpServletResponse $RES).addHeader("Location", $URL)
+  pattern-sanitizers:
+  - patterns:
+    - pattern-inside: |
+        if ($SAFE.contains($URL)){
+          ...
+        }
+    - pattern-either:
+      - pattern: |
+          ($X.servlet.http.HttpServletResponse $RES).sendRedirect($URL)
+      - pattern: |
+          ($X.servlet.http.HttpServletResponse $RES).addHeader("Location", $URL)
+  metadata:
+    category: "security"
+    cwe: "CWE-601"
+    owasp:
+    - "A1:2017-Injection"
+    - "A03:2021-Injection"
+    shortDescription: "URL redirection to untrusted site ('Open Redirect')"
+    security-severity: "Info"
+  severity: "ERROR"

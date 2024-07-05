@@ -1,0 +1,85 @@
+# yamllint disable
+# License: MIT (c) GitLab Inc.
+# yamllint enable
+---
+rules:
+- id: "java_inject_rule-FileDisclosureSpringFramework"
+  languages:
+  - "java"
+  mode: "taint"
+  pattern-sources:
+  - pattern: "(javax.servlet.http.HttpServletRequest $VAR).getParameter(...)"
+  - pattern: "(javax.servlet.http.HttpServletRequest $VAR).getParameterNames();"
+  - pattern: "(javax.servlet.http.HttpServletRequest $VAR).getParameterValues(...);"
+  - pattern: "(javax.servlet.http.HttpServletRequest $VAR).getParameterMap();"
+  - pattern: "(javax.servlet.http.HttpServletRequest $VAR).getHeader(...);"
+  - pattern: "(javax.servlet.http.HttpServletRequest $VAR).getPathInfo();"
+  pattern-sinks:
+  - patterns:
+    - pattern-not-inside: |
+        $FST = $MAP.getOrDefault(..., "...");
+          ...
+    - pattern: "new org.springframework.web.servlet.ModelAndView($FST, ...);"
+    - focus-metavariable: "$FST"
+  - patterns:
+    - pattern-not-inside: |
+        $FST = $MAP.getOrDefault(..., "...");
+        ...
+    - pattern-inside: |
+        $MVC = new org.springframework.web.servlet.ModelAndView();
+        ...
+    - pattern: "$MVC.setViewName(...);"
+  message: |
+    The `org.springframework.web.servlet.ModelAndView` class may
+    potentially allow access to restricted files if called with user-supplied input.
+
+    The ModelAndView class looks up a view by name to resolve a `.jsp`
+    file. If this view name comes from user-supplied input, it could be abused to attempt
+    to return a JSP view that the user should not have access to.
+
+    Use a lookup table or hardcode which views or paths the user should be directed to.
+
+    Example using a lookup table to resolve a view from a Spring MVC application:
+    ```
+    @RequestMapping(value="/mvc", method=RequestMethod.GET)
+    public ModelAndView mvc(HttpServletRequest request, HttpServletResponse response, Model model)
+     {
+      // Create a look up table or pull from a data source
+      HashMap<String, String> lookupTable = new HashMap<>();
+      lookupTable.put("key1", "view1");
+      lookupTable.put("key2", "view2");
+      // Get user input
+      String userInput = request.getParameter("key");
+      // Look up view from the user input
+      String viewValue = lookupTable.getOrDefault(userInput, "Resource1");
+      // return the new model and view
+      return new ModelAndView(viewValue);
+    }
+    ```
+    
+    Example using a redirect instead of a `RequestDispatcher` in Spring:
+    ```
+    @RequestMapping(value="/mvc", method=RequestMethod.GET)
+    public void mvc(HttpServletRequest request, HttpServletResponse response, Model model)
+     {
+      // Create a look up table or pull from a data source
+      HashMap<String, String> lookupTable = new HashMap<>();
+      lookupTable.put("key1", "view1");
+      lookupTable.put("key2", "view2");
+      // Get user input
+      String userInput = request.getParameter("key");
+      // Look up resource to redirect to from the user input
+      String redirectValue = lookupTable.getOrDefault(userInput, "/Resource1");
+      // return the new model and view
+      response.sendRedirect(redirectValue);
+    }
+    ```
+  metadata:
+    shortDescription: "Files or directories accessible to external parties"
+    category: "security"
+    cwe: "CWE-552"
+    owasp:
+    - "A5:2017-Broken Access Control"
+    - "A01:2021-Broken Access Control"
+    security-severity: "HIGH"
+  severity: "ERROR"

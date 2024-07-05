@@ -1,0 +1,32 @@
+# yamllint disable
+# License: MIT (c) GitLab Inc.
+# yamllint enable
+---
+rules:
+- id: "java_crypto_rule-WeakTLSProtocol-SSLContext"
+  languages:
+  - "java"
+  patterns:
+  - pattern-not: "javax.net.ssl.SSLContext.getInstance(\"TLSv1.3\", ...)"
+  - pattern-not: "javax.net.ssl.SSLContext.getInstance(\"TLSv1.2\", ...)"
+  - pattern: "javax.net.ssl.SSLContext.getInstance(\"...\", ...)"
+  message: |
+    Avoid initializing SSLContext with insecure protocols like `SSL`, `SSLv2`, or `SSLv3`. 
+    These protocols are outdated and do not validate certificates by default. Additionally,
+    these older `SSL` versions have many known security issues.
+    
+    Instead, use secure protocols like `TLSv1.2` or `TLSv1.3`.
+    ```
+    SSLContext context = SSLContext.getInstance("TLSv1.3");
+    ```
+    For more information on see OWASP:
+       - https://owasp.org/www-project-web-security-testing-guide/v41/4-Web_Application_Security_Testing/09-Testing_for_Weak_Cryptography/01-Testing_for_Weak_SSL_TLS_Ciphers_Insufficient_Transport_Layer_Protection
+  metadata:
+    shortDescription: "Improper certificate validation"
+    category: "security"
+    cwe: "CWE-295"
+    owasp:
+    - "A3:2017-Sensitive Data Exposure"
+    - "A02:2021-Cryptographic Failures"
+    security-severity: "MEDIUM"
+  severity: "WARNING"

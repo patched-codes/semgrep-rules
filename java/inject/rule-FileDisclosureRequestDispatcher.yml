@@ -1,0 +1,61 @@
+# yamllint disable
+# License: MIT (c) GitLab Inc.
+# yamllint enable
+---
+rules:
+- id: "java_inject_rule-FileDisclosureRequestDispatcher"
+  languages:
+  - "java"
+  mode: "taint"
+  pattern-sources:
+  - pattern: "(javax.servlet.http.HttpServletRequest $VAR).getParameter(...)"
+  - pattern: "(javax.servlet.http.HttpServletRequest $VAR).getParameterNames();"
+  - pattern: "(javax.servlet.http.HttpServletRequest $VAR).getParameterValues(...);"
+  - pattern: "(javax.servlet.http.HttpServletRequest $VAR).getParameterMap();"
+  - pattern: "(javax.servlet.http.HttpServletRequest $VAR).getHeader(...);"
+  - pattern: "(javax.servlet.http.HttpServletRequest $VAR).getPathInfo();"
+  pattern-sinks:
+  - patterns:
+    - pattern-not-inside: |
+        $VAL = $MAP.getOrDefault(..., "...");
+        ...
+    - pattern-inside: |
+        $REQ = $HTTP.getRequestDispatcher(...);
+        ...
+    - pattern-either:
+      - pattern: "$REQ.include($FST, $SND)"
+      - pattern: "$REQ.forward($FST, $SND)"
+  message: |
+    The `HttpRequest.getRequestDispatcher()`'s `include` and `forward` methods will return
+    any file that is resolvable within the web application context. This includes the `web.xml`
+    file, any compiled classes, `jsp` files, and additional JAR or WAR libraries that are
+    accessible.
+
+    Never pass user-supplied input directly to any of these methods. Use a lookup table or
+    hardcode
+    which views or paths the user should be directed to. Another option is to use a simple HTTP
+    redirect by returning an empty response body with a 301 status code and a `Location` redirect
+    header. In Java servlets, this can be done by using the `response.sendRedirect(...)` method.
+
+    Example using a redirect instead of a `RequestDispatcher`:
+    ```
+    // Create a look up table or pull from a data source
+    HashMap<String, String> lookupTable = new HashMap<>();
+    lookupTable.put("key1", "/Resource1");
+    lookupTable.put("key2", "/Resource2");
+    // Get user input
+    String userInput = request.getParameter("key");
+    // Look up resource to redirect to from the user input
+    String redirectValue = lookupTable.getOrDefault(userInput, "/Resource1");
+    // Redirect the user
+    response.sendRedirect(redirectValue);
+    ```
+  metadata:
+    shortDescription: "Files or directories accessible to external parties"
+    category: "security"
+    cwe: "CWE-552"
+    owasp:
+    - "A5:2017-Broken Access Control"
+    - "A01:2021-Broken Access Control"
+    security-severity: "HIGH"
+  severity: "ERROR"

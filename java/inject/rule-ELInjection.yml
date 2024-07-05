@@ -1,0 +1,92 @@
+# yamllint disable
+# License: MIT (c) GitLab Inc.
+# yamllint enable
+---
+rules:
+- id: "java_inject_rule-ELInjection"
+  languages:
+  - "java"
+  message: |
+    This rule identifies potential Expression Language (EL) injection vulnerabilities within Java applications. 
+    The rule targets use of `createValueExpression`, `createMethodExpression`, `ELProcessor.eval`, `getValue`, 
+    and `setValue` methods, particularly when input to these methods is not a hardcoded string, indicating dynamic 
+    evaluation of potentially untrusted input. 
+
+    `createValueExpression` creates a `ValueExpression` object which gets evaluated upon calling methods like 
+    `getValue()` and `setValue()` or a Lambda `invoke()` i.e. it evaluates the expression passed to the 
+    `createValueExpression` method.
+
+    Similarly, `createMethodExpression` creates a `MethodExpression` object which gets evaluated upon calling 
+    methods like `invoke()` and `getMethodInfo()`.
+    `ELProcessor.eval`, `getValue()`, and `setValue()` methods all evaluate their expressions which are passed 
+    as parameters.
+
+    Calling these method directly with user-supplied input may allow an adversary to execute arbitrary Java 
+    code, including OS system commands. Never call these methods directly with user-supplied input. Consider 
+    alternate methods such as a lookup table to take user input and resolve hardcoded values.
+
+    Secure example:
+
+    ```
+    import javax.el.ELProcessor;
+    import java.util.Set;
+
+    public class SafeELHandling {
+        private static final Set<String> ALLOWED_VALUES = Set.of("value1", "value2", "value3");
+
+        public void processInput(String userInput) {
+            // Validate user input against the allowlist
+            if (!ALLOWED_VALUES.contains(userInput)) {
+                throw new IllegalArgumentException("Invalid input");
+            }
+            
+            ELProcessor elProcessor = new ELProcessor();
+            elProcessor.defineBean("userInput", userInput);
+            
+            // Example EL expression using the safe, predefined input
+            String result = (String) elProcessor.eval(userInput);
+        }
+    }
+    ```
+  metadata:
+    category: "security"
+    cwe: "CWE-917"
+    shortDescription: "Improper neutralization of special elements used in an expression
+      language statement ('Expression Language Injection')"
+    owasp:
+    - "A1:2017-Injection"
+    - "A03:2021-Injection"
+    technology:
+    - "java"
+    security-severity: "Info"
+  pattern-either:
+  - patterns:
+    - pattern: |
+        (ExpressionFactory $EXP).createValueExpression((ELContext $CTX), $EXPR,
+        ...)
+    - pattern-not: |
+        (ExpressionFactory $EXP).createValueExpression((ELContext $CTX), "...",
+        ...)
+  - patterns:
+    - pattern: |
+        (ExpressionFactory $EXP).createMethodExpression((ELContext $CTX), $EXPR,
+        ...)
+    - pattern-not: |
+        (ExpressionFactory $EXP).createMethodExpression((ELContext $CTX), "...",
+        ...)
+  - patterns:
+    - pattern: |
+        ($X.el.ELProcessor $P).eval(...)
+    - pattern-not: |
+        ($X.el.ELProcessor $P).eval("...", ...)
+  - patterns:
+    - pattern: |
+        ($X.el.ELProcessor $P).getValue(...)
+    - pattern-not: |
+        ($X.el.ELProcessor $P).getValue("...", ...)
+  - patterns:
+    - pattern: |
+        ($X.el.ELProcessor $P).setValue(...)
+    - pattern-not: |
+        ($X.el.ELProcessor $P).setValue("...", "...")   
+  severity: "WARNING"

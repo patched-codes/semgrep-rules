@@ -1,0 +1,94 @@
+# yamllint disable
+# License: MIT (c) GitLab Inc.
+# yamllint enable
+---
+rules:
+- id: "java_file_rule-FilenameUtils"
+  languages:
+  - "java"
+  message: |
+    The filename provided by the FileUpload API can be tampered with by the client to reference
+    unauthorized files. The provided filename should be properly validated to ensure it's properly
+    structured, contains no unauthorized path characters (e.g., / \), and refers to an authorized
+    file.
+
+    The application was found to take a parameter from user input to construct a path name. If an
+    unfiltered parameter is passed to this file API, files from an arbitrary filesystem location
+    could be read. When data from an unstrusted source is untrusted source is used to construct
+    a file path, an attacker could potentially gain access to restrcited files locations outside
+    the relevant context.
+
+    For example, if the application tries to access the users profile picture based on their user
+    name by concatenating the username to the filepath:
+
+    "images/userprofiles/" + username
+
+    The expected result of this would be "images/userprofiles/alice", however an attacker could
+    use a malicious input such as "../../../etc/passwd" to gain access to and/or manipulate
+    sensitive information
+
+    Assume all input is malicious. Use an "accept known good" input validation strategy.
+
+    Inputs can be sanitized by using the getName() method with concat() method to remove the 
+    potentially malicious path traversal and limit the scope to a restricted directory. Or 
+    input can also be sanitized by using resolve() method alongwith startsWith() method to 
+    verify that the base path of the file is safe and expected.
+
+    Example of limiting path traversal using getName:
+
+    ```
+    protected void doPut(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+
+        String input = req.getHeader("input");
+
+        input = getName(input);
+        
+        String safePath = concat(basePath, input);
+
+        // Read the contents of the file
+        File file = new File(safePath);
+    }
+    ```
+  metadata:
+    category: "security"
+    cwe: "CWE-22"
+    owasp: 
+    - "A5:2017-Broken Access Control"    
+    - "A01:2021-Broken Access Control"
+    shortDescription: "Improper limitation of a pathname to a restricted directory
+      ('Path Traversal')"
+    security-severity: "Info"
+    technology:
+    - "java"
+  mode: "taint"
+  pattern-sanitizers:
+  - pattern: |
+      $NAME = org.apache.commons.io.FilenameUtils.getName(...);
+      ...
+      $SAFE = concat($BASE, $NAME);
+  - pattern: |
+      $RET $FUN(...){
+        ...
+        $PATH = $BP.resolve(...);
+        ...
+        if(!$PATH.startsWith(...)) {
+          throw new $EXC(...);
+        }
+        ...
+      }
+  pattern-sources:
+  - pattern: "(HttpServletRequest $REQ)"
+  pattern-sinks:
+  - pattern: "org.apache.commons.io.FilenameUtils.concat(...)"
+  - pattern: "org.apache.commons.io.FilenameUtils.getFullPath(...)"
+  - pattern: "org.apache.commons.io.FilenameUtils.getFullPathNoEndSeparator(...)"
+  - pattern: "org.apache.commons.io.FilenameUtils.getPath(...)"
+  - pattern: "org.apache.commons.io.FilenameUtils.getPathNoEndSeparator(...)"
+  - pattern: "org.apache.commons.io.FilenameUtils.normalize(...)"
+  - pattern: "org.apache.commons.io.FilenameUtils.normalizeNoEndSeparator(...)"
+  - pattern: "org.apache.commons.io.FilenameUtils.normalizeNoEndSeparator(...)"
+  - pattern: "org.apache.commons.io.FilenameUtils.removeExtension(...)"
+  - pattern: "org.apache.commons.io.FilenameUtils.separatorsToSystem(...)"
+  - pattern: "org.apache.commons.io.FilenameUtils.separatorsToUnix(...)"
+  - pattern: "org.apache.commons.io.FilenameUtils.separatorsToWindows(...)"
+  severity: "WARNING"
