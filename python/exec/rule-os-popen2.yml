@@ -1,0 +1,35 @@
+# yamllint disable
+# License: MIT (c) GitLab Inc.
+# yamllint enable
+---
+rules:
+- id: "python_exec_rule-os-popen2"
+  languages:
+  - "python"
+  message: |
+    Starting a process with a shell; seems safe, but may be changed in the future, consider
+    rewriting without shell
+  patterns:
+  - pattern-either:
+    - pattern: "os.system(...)"
+    - pattern: "os.popen(...)"
+    - pattern: "os.popen2(...)"
+    - pattern: "os.popen3(...)"
+    - pattern: "os.popen4(...)"
+    - pattern: "popen2.popen2(...)"
+    - pattern: "popen2.popen3(...)"
+    - pattern: "popen2.popen4(...)"
+    - pattern: "popen2.Popen3(...)"
+    - pattern: "popen2.Popen4(...)"
+    - pattern: "commands.getoutput(...)"
+    - pattern: "commands.getstatusoutput(\"\")"
+  metadata:
+    cwe: "CWE-78"
+    owasp:
+    - "A1:2017-Injection"
+    - "A03:2021-Injection"
+    shortDescription: "Improper neutralization of special elements used in an OS Command
+      ('OS Command Injection')"
+    security-severity: "High"
+    category: "security"
+  severity: "INFO"

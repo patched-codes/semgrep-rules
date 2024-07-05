@@ -1,0 +1,66 @@
+# yamllint disable
+# License: MIT (c) GitLab Inc.
+# yamllint enable
+---
+rules:
+- id: "python_snmp_rule-snmp-weak-cryptography"
+  languages:
+  - "python"
+  message: |
+    Pysnmp was detected using SNMPv3 without authentication or encryption
+    protections enabled.
+    
+    - Use of `usmNoAuthProtocol` or `usmNoPrivProtocol` indicates that
+    either authentication or privacy, respectively, is not being used.  
+    - The absence of  `authKey` (or `authKey=None`) implies no authentication, 
+    which is equivalent to using `usmNoAuthProtocol`. 
+    - The absence of `privKey` (or `privKey=None`) implies no privacy (encryption), 
+    which is equivalent to using `usmNoPrivProtocol`.
+    
+    To enhance the security of your SNMP communications, it is recommended to use both
+    authentication and privacy features in SNMPv3:
+    
+    - Use SHA for Authentication: SHA (Secure Hash Algorithm) is a more secure option 
+    for SNMP message authentication. To use SHA, set the `authProtocol` to 
+    `usmHMACSHAAuthProtocol` and provide a strong `authKey`.
+    - Use AES for Privacy: AES (Advanced Encryption Standard) is recommended for 
+    encrypting SNMP messages. Set the `privProtocol` to `usmAesCfb128Protocol`
+    or a similar AES-based protocol and specify a strong `privKey`.
+    
+    Example of secure `UsmUserData` configuration:
+    ``` 
+      from pysnmp.hlapi import UsmUserData, usmHMACSHAAuthProtocol, usmAesCfb128Protocol
+          
+      user_data = UsmUserData('username','authKey', 'privKey',           
+                            authProtocol=usmHMACSHAAuthProtocol,
+                            privProtocol=usmAesCfb128Protocol)
+    ```
+  metadata:
+    cwe: "CWE-319"
+    category: "security"
+    shortDescription: "Cleartext transmission of sensitive information"
+    owasp:
+    - "A3:2017-Sensitive Data Exposure"
+    - "A02:2021-Cryptographic Failures"
+    security-severity: "Medium"
+  pattern-either:
+  - pattern-regex: "UsmUserData(.*usmNoAuthProtocol.*)"
+  - pattern-regex: "UsmUserData(.*usmNoPrivProtocol.*)"
+  - pattern: |
+      UsmUserData(..., authKey=None, ...)
+  - pattern: |
+      UsmUserData(..., privKey=None, ...)
+  - pattern: |
+      UsmUserData(..., authProtocol=(1,3,6,1,6,3,10,1,1,1), ...)
+  - pattern: |
+      UsmUserData(..., privProtocol=(1,3,6,1,6,3,10,1,2,1), ...)
+  - patterns:
+    - pattern-not: |
+        UsmUserData($NAME,$AUTHKEY,"...", ...)
+    - pattern-not: |
+        UsmUserData(..., privKey=$PRIVKEY, ...)
+    - pattern-not: |
+        UsmUserData(..., privProtocol=$PRIVPROT, ...)
+    - pattern: |
+        UsmUserData(...)
+  severity: "WARNING"
